@@ -1,0 +1,31 @@
+# --- Large AI Model Files ---
+*.bin
+*.pt
+*.pth
+*.safetensors
+*.h5
+*.ckpt
+*.gguf
+
+# --- Folders to Ignore ---
+# Ignore the folder where you are saving your adapters
+models/
+results/
+results_prototype/
+
+# Ignore Google Drive mount points (if you run locally but copied this folder)
+drive/
+/content/
+
+# --- Python & Environment Files ---
+# Ignore virtual environments
+.venv/
+env/
+venv/
+
+# Ignore Python cache files
+__pycache__/
+*.pyc
+
+# Ignore local config secrets (keys, passwords)
+.env
