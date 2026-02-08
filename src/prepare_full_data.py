@@ -7,8 +7,8 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # --- CONFIGURATION ---
-INPUT_JSONL = "data/02_generated/eli5_dataset_raw.jsonl"
-OUTPUT_DIR = "data/04_processed/full"  # Changed folder name to 'full'
+INPUT_JSONL = "data/02_generated/eli5_dataset_rewritten_complex.jsonl"
+OUTPUT_DIR = "data/04_processed/full_revised"  # Changed folder name to 'full'
 RANDOM_SEED = 42
 TEST_SIZE = 0.1  # 10% for validation (approx 800 examples)
 

@@ -6,9 +6,9 @@ import logging
 
 
 logging.basicConfig(level = logging.INFO, format = '%(asctime)s - %(levelname)s - %(message)s')
-INPUT_JSONL = "data/02_generated/eli5_dataset_raw.jsonl"
-OUTPUT_DIR = "data/04_processed/prototype"
-PROTOTYPE_SIZE = 1000
+INPUT_JSONL = "data/02_generated/eli5_dataset_rewritten_complex.jsonl"
+OUTPUT_DIR = "data/04_processed/smaller_dataset"
+PROTOTYPE_SIZE = 5000
 RANDOM_SEED = 42
 
 def load_jsonl(file_path):

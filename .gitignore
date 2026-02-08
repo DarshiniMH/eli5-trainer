@@ -12,6 +12,7 @@
 models/
 results/
 results_prototype/
+data/
 
 # Ignore Google Drive mount points (if you run locally but copied this folder)
 drive/
@@ -29,3 +30,9 @@ __pycache__/
 
 # Ignore local config secrets (keys, passwords)
 .env
+
+#Ignore the following code files
+src/Combine_model_results.py
+src/optimized_finetune.py
+src/llm_eval_judge_v1.py
+src/llm_eval_judge_v2.py
