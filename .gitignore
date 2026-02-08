@@ -11,7 +11,7 @@
 # Ignore the folder where you are saving your adapters
 models/
 results/
-results_prototype/
+result_prototype/
 data/
 
 # Ignore Google Drive mount points (if you run locally but copied this folder)
