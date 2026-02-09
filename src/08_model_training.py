@@ -10,7 +10,7 @@ from peft import LoraConfig, prepare_model_for_kbit_training
 from trl import SFTTrainer, SFTConfig
 
 # -----------------------------
-# 0) RUN CONFIGURATIONS
+# 0) HYPERPARAMETER CONFIGURATIONS
 # -----------------------------
 RUN_CONFIGS = {
     "runA_lr2e4_const_r64": dict(lr=2e-4, scheduler="constant", r=64, alpha=16),
@@ -24,17 +24,17 @@ assert RUN_NAME in RUN_CONFIGS, f"RUN_NAME must be one of: {list(RUN_CONFIGS.key
 cfg = RUN_CONFIGS[RUN_NAME]
 
 # -----------------------------
-# 1) DATASET LOADING
+# 1) DATASET INITIALIZATION
 # -----------------------------
 MODEL_NAME = "mistralai/Mistral-7B-Instruct-v0.2"
 
 TRAIN_FILE = "data/04_processed/full_revised/train_full_revised.jsonl"
 VAL_FILE   = "data/04_processed/full_revised/validation_full_revised.jsonl"
 
-# Training subset size for ablation studies
+# Subset size for ablation studies
 TRAIN_SUBSET_SIZE = None
 
-# Evaluation subset size for validation steps
+# Evaluation batch subset size
 EVAL_SUBSET_SIZE = 256
 
 dataset = load_dataset(
@@ -42,49 +42,49 @@ dataset = load_dataset(
     data_files={"train": TRAIN_FILE, "validation": VAL_FILE},
 )
 
-# Subset selection for training data
+# Selection of training data subset
 if TRAIN_SUBSET_SIZE is not None:
     dataset["train"] = dataset["train"].shuffle(seed=123).select(range(TRAIN_SUBSET_SIZE))
 
-# Subset selection for validation data
+# Selection of validation data subset
 eval_ds = dataset["validation"]
 if EVAL_SUBSET_SIZE is not None:
     eval_ds = eval_ds.select(range(min(EVAL_SUBSET_SIZE, len(eval_ds))))
 
 # -----------------------------
-# 2) DIRECTORY PATHS
+# 2) PERSISTENCE DIRECTORIES
 # -----------------------------
 
-# Best adapter persistence directory
+# Directory for best adapter storage
 DRIVE_BEST_ADAPTER_DIR = f"models/adapters_sweeps/{RUN_NAME}/best"
 os.makedirs(DRIVE_BEST_ADAPTER_DIR, exist_ok=True)
 
-# Periodic resume checkpoint root directory
+# Directory for periodic checkpoint storage
 ENABLE_RESUME_TO_DRIVE = True
 DRIVE_RESUME_ROOT = f"models/resume_checkpoints/{RUN_NAME}"
 os.makedirs(DRIVE_RESUME_ROOT, exist_ok=True)
 
 # -----------------------------
-# 3) TRAINING PARAMETERS
+# 3) TRAINING FLOW PARAMETERS
 # -----------------------------
-# Local checkpoint and evaluation step alignment
+# Step alignment for local saves and evaluation
 SAVE_STEPS_LOCAL = 25
 EVAL_STEPS = 25
 SAVE_TOTAL_LIMIT_LOCAL = 3
 
-# Resume checkpoint frequency and limit
+# Frequency and capacity for resume checkpoints
 RESUME_TO_DRIVE_EVERY_STEPS = 250
 KEEP_LAST_N_RESUME_CKPTS = 2
 
-# Automatic resumption flag from latest checkpoint
+# Resumption status from external storage
 RESUME_FROM_DRIVE = False
 
 # -----------------------------
-# 4) CALLBACKS
+# 4) TRAINER CALLBACKS
 # -----------------------------
 class SaveBestAdapterToDriveCallback(TrainerCallback):
     """
-    Persistence of LoRA adapter and tokenizer upon improvement of evaluation loss.
+    Persistence of LoRA adapter and tokenizer upon evaluation loss improvement.
     """
     def __init__(self, save_dir: str, tokenizer):
         self.save_dir = save_dir
@@ -105,11 +105,11 @@ class SaveBestAdapterToDriveCallback(TrainerCallback):
             if model is None:
                 return control
 
-            # Save best performing model and tokenizer
+            # Storage of optimal model and tokenizer
             model.save_pretrained(self.save_dir)
             self.tokenizer.save_pretrained(self.save_dir)
 
-            # Metadata persistence for evaluation metrics
+            # Metadata persistence for metrics
             with open(os.path.join(self.save_dir, "best_eval.json"), "w") as f:
                 json.dump({"global_step": int(state.global_step), "eval_loss": float(loss)}, f)
 
@@ -120,7 +120,7 @@ class SaveBestAdapterToDriveCallback(TrainerCallback):
 
 class PeriodicResumeCheckpointToDriveCallback(TrainerCallback):
     """
-    Periodic replication of full local checkpoint directory to external storage.
+    Replication of local checkpoint directories to external storage.
     """
     def __init__(self, local_root: str, drive_root: str, every_steps: int, keep_last: int = 2):
         self.local_root = local_root
@@ -144,7 +144,7 @@ class PeriodicResumeCheckpointToDriveCallback(TrainerCallback):
             shutil.rmtree(dst)
         shutil.copytree(src, dst)
 
-        # Removal of outdated resume checkpoints
+        # Cleanup of outdated checkpoints
         ckpts = []
         for name in os.listdir(self.drive_root):
             if name.startswith("checkpoint-"):
@@ -162,7 +162,7 @@ class PeriodicResumeCheckpointToDriveCallback(TrainerCallback):
 
 
 def find_latest_checkpoint(root: str) -> str | None:
-    """Detection of most recent checkpoint directory within specified root."""
+    """Detection of most recent checkpoint directory within specified root path."""
     if not os.path.exists(root):
         return None
     best = None
@@ -177,7 +177,7 @@ def find_latest_checkpoint(root: str) -> str | None:
     return best[1] if best else None
 
 # -----------------------------
-# 5) MODEL AND TOKENIZER INITIALIZATION
+# 5) MODEL AND TOKENIZER SETUP
 # -----------------------------
 bnb_config = BitsAndBytesConfig(
     load_in_4bit=True,
@@ -198,7 +198,7 @@ tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, trust_remote_code=True)
 tokenizer.pad_token = tokenizer.eos_token
 tokenizer.padding_side = "right"
 
-# Preparation of model for k-bit training
+# Preparation of model for k-bit training architecture
 model = prepare_model_for_kbit_training(model)
 
 peft_config = LoraConfig(
@@ -211,11 +211,11 @@ peft_config = LoraConfig(
 )
 
 def formatting_prompts_func(example):
-    """Formatting of input-output pairs into instruction strings."""
+    """Conversion of input-output pairs into standardized instruction strings."""
     return f"<s>[INST] {example['input']} [/INST] {example['output']} </s>"
 
 # -----------------------------
-# 6) TRAINING CONFIGURATION
+# 6) TRAINING SPECIFICATIONS
 # -----------------------------
 sft_args = SFTConfig(
     output_dir=LOCAL_CKPT_DIR,
@@ -255,7 +255,7 @@ trainer = SFTTrainer(
     formatting_func=formatting_prompts_func,
 )
 
-# Implementation of persistence callbacks
+# Implementation of persistence and resumption callbacks
 trainer.add_callback(SaveBestAdapterToDriveCallback(DRIVE_BEST_ADAPTER_DIR, tokenizer))
 if ENABLE_RESUME_TO_DRIVE:
     trainer.add_callback(
@@ -269,7 +269,7 @@ if ENABLE_RESUME_TO_DRIVE:
 
 print(f"\nSTART TRAINING: {RUN_NAME}")
 
-# Determination of resume path
+# Determination of checkpoint resumption path
 resume_path = None
 if RESUME_FROM_DRIVE:
     resume_path = find_latest_checkpoint(DRIVE_RESUME_ROOT)
@@ -277,7 +277,7 @@ if RESUME_FROM_DRIVE:
 
 trainer.train(resume_from_checkpoint=resume_path)
 
-# Persistence of best model and tokenizer at conclusion
+# Final storage of optimized model and tokenizer
 trainer.model.save_pretrained(DRIVE_BEST_ADAPTER_DIR)
 tokenizer.save_pretrained(DRIVE_BEST_ADAPTER_DIR)
 
