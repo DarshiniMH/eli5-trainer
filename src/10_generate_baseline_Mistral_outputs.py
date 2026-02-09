@@ -4,17 +4,24 @@ import os
 import logging
 from tqdm.auto import tqdm
 
-# Setup logging
+# -----------------------------
+# 1) LOGGING AND CONFIGURATION
+# -----------------------------
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-# We use a GGUF (Quantized) version of Mistral. This fits in your 16GB RAM.
+# Specification of GGUF quantized model for resource-constrained environments
 MODEL_REPO = "TheBloke/Mistral-7B-Instruct-v0.2-GGUF"
-MODEL_FILE = "mistral-7b-instruct-v0.2.Q4_K_M.gguf" # 4-bit quantization (approx 4.5GB)
+MODEL_FILE = "mistral-7b-instruct-v0.2.Q4_K_M.gguf" 
 
+# File path definitions for validation and result persistence
 VALIDATION_FILE = "data/04_processed/prototype/validation.jsonl"
 OUTPUT_FILE = "results_prototype/baseline_validation_results.jsonl"
 
+# -----------------------------
+# 2) DATA UTILITIES
+# -----------------------------
 def load_jsonl(filepath):
+    """Loads records from a JSONL file into a list of dictionaries."""
     data = []
     if not os.path.exists(filepath):
         logging.error(f"Input file not found: {filepath}")
@@ -31,18 +38,23 @@ def load_jsonl(filepath):
         return []
     return data
 
+# -----------------------------
+# 3) MAIN INFERENCE ENGINE
+# -----------------------------
 def main():
+    """Executes baseline generation using CPU-optimized quantized Mistral weights."""
     logging.info(f"Starting baseline generation using CPU-Optimized {MODEL_REPO}...")
 
+    # Data ingestion phase
     validation_data = load_jsonl(VALIDATION_FILE)
     if not validation_data:
-        logging.error("No validation data found.")
+        logging.error("No validation data found. Execution terminated.")
         return
     
-    # Load the model explicitly for CPU using ctransformers
-    # gpu_layers=0 means we run entirely on CPU (safest for your Intel Mac)
+    # Initialization of quantized model for CPU execution
+    # Parameter gpu_layers=0 ensures execution remains on host processor RAM
     try:
-        logging.info("Loading model into RAM... (This might take a minute)")
+        logging.info("Loading model into RAM...")
         llm = AutoModelForCausalLM.from_pretrained(
             MODEL_REPO,
             model_file=MODEL_FILE,
@@ -54,19 +66,21 @@ def main():
         logging.error(f"Failed to load model: {e}")
         return
 
-    logging.info("Model loaded. Starting generation...")
+    logging.info("Model loaded. Commencing generation loop...")
 
+    # Output directory creation
     os.makedirs(os.path.dirname(OUTPUT_FILE), exist_ok=True)
 
+    # Generation and persistence of baseline results
     with open(OUTPUT_FILE, 'w') as f:
         for item in tqdm(validation_data, desc="Generating answers"):
             input_text = item['input']
 
-            # Mistral Instruct format
+            # Formatting according to Mistral-Instruct prompt template
             formatted_prompt = f"<s>[INST] {input_text} [/INST]"
 
             try:
-                # Generate text directly
+                # Execution of text generation with configured sampling parameters
                 generated_text = llm(
                     formatted_prompt, 
                     max_new_tokens=512, 
@@ -74,12 +88,14 @@ def main():
                     top_p=0.95
                 )
                 
+                # Compilation of input, target, and baseline output for evaluation
                 result_data = {
                     "input": input_text,
                     "expected_output": item['output'],
                     "baseline_output": generated_text.strip()
                 }
-                f.write(json.dumps(result_data) + '\n')
+                f_out_line = json.dumps(result_data) + '\n'
+                f.write(f_out_line)
                 f.flush()
             except Exception as e:
                 logging.error(f"Error during generation: {e}")
