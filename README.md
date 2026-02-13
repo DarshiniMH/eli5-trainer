@@ -131,8 +131,12 @@ The **largest visible improvement** came from:
 <details>
 <summary><strong>Base Mistral (untuned)</strong></summary>
 
-> A choreographic narrative is a story told through dance. It is a sequence of movements and actions that convey a specific theme, idea, or emotion. The narrative can be abstract or representational, and it can be told through various dance genres, such as ballet, contemporary, or hip hop.\n\nThe choreographer creates the narrative by designing the movements, music, costumes, and set design to convey the story. Dancers then perform these elements in a coordinated and expressive way to bring the narrative to life.\n\nChoreographic narratives can be based on a wide range of sources, including literature, mythology, history, or personal experiences. They can be used to explore complex themes, such as love, loss, or identity, or to entertain and delight audiences.\n\nEffective choreographic narratives require a strong sense of storytelling and a deep understanding of the dance medium. The choreographer must be able to convey the narrative through movement and expression, rather than relying on dialogue or spoken words. The dancers must also be able to embody the characters and emotions of the narrative, bringing it to life in a compelling and engaging way.\n\nOverall, a choreographic narrative is.
->(Formal + comprehensive, but loses the simple tone)
+> A choreographic narrative is a story told through dance. It is a sequence of movements and actions that convey a specific theme, idea, or emotion. The narrative can be abstract or representational, and it can be told through various dance genres, such as ballet, contemporary, or hip hop.
+> The choreographer creates the narrative by designing the movements, music, costumes, and set design to convey the story. Dancers then perform these elements in a coordinated and expressive way to bring the narrative to life.
+> Choreographic narratives can be based on a wide range of sources, including literature, mythology, history, or personal experiences. They can be used to explore complex themes, such as love, loss, or identity, or to entertain and delight audiences.
+> Effective choreographic narratives require a strong sense of storytelling and a deep understanding of the dance medium. The choreographer must be able to convey the narrative through movement and expression, rather than relying on dialogue or spoken words. The dancers must also be able to embody the characters and emotions of the narrative, bringing it to life in a compelling and engaging way.  
+> Overall, a choreographic narrative is.
+> (Formal + comprehensive, but loses the simple tone)
 </details>
 
 <details>
