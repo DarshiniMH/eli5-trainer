@@ -131,29 +131,30 @@ The **largest visible improvement** came from:
 <details>
 <summary><strong>Base Mistral (untuned)</strong></summary>
 
-> The Seasons' Dance" is a choreographic narrative that tells the story of the changing seasons and the interconnectedness of all living beings within nature. This piece explores the themes of transformation, renewal, and unity through movement, music, and costumes.  
-> ... (continues with invented storyline)
-
+> A choreographic narrative is a story told through dance. It is a sequence of movements and actions that convey a specific theme, idea, or emotion. The narrative can be abstract or representational, and it can be told through various dance genres, such as ballet, contemporary, or hip hop.\n\nThe choreographer creates the narrative by designing the movements, music, costumes, and set design to convey the story. Dancers then perform these elements in a coordinated and expressive way to bring the narrative to life.\n\nChoreographic narratives can be based on a wide range of sources, including literature, mythology, history, or personal experiences. They can be used to explore complex themes, such as love, loss, or identity, or to entertain and delight audiences.\n\nEffective choreographic narratives require a strong sense of storytelling and a deep understanding of the dance medium. The choreographer must be able to convey the narrative through movement and expression, rather than relying on dialogue or spoken words. The dancers must also be able to embody the characters and emotions of the narrative, bringing it to life in a compelling and engaging way.\n\nOverall, a choreographic narrative is.
+>(Formal + comprehensive, but loses the simple tone)
 </details>
 
 <details>
 <summary><strong>Dataset v1 tuned (LR=2e‑4, constant, r=64, α=16)</strong></summary>
 
 > Imagine you're watching a dance performance. The dancers are moving around the stage to tell a story. This is called a 'choreographic narrative.' It's like when you watch a movie, and you see the characters acting out a story. In dance, the dancers use their movements to show the story or feelings, just like actors do in a movie.
-
+> (Simplistic + relatable, but lacks depth)
 </details>
 
 <details>
-<summary><strong>Dataset v2 tuned (same config as above)</strong></summary>
+<summary><strong>Dataset v2 tuned (same config)</strong></summary>
 
-> Choreographic narrative is a way of telling a story through dance. Imagine dance as a special language that uses movement to express feelings and ideas... (more complete + clearer + grounded)
+> Choreographic narrative is a way of telling a story through dance. Imagine dance as a special language that uses movement to express feelings and ideas. Just like a storybook has words and pictures, a dance can have steps and music. When dancers perform, they use their bodies to show what is happening in the story. For example, if the story is about a journey, the dancers might move in ways that show traveling, like running or skipping. If the story is about love, the dancers might move close together or twirl around each other. The music helps tell the story too, just like a soundtrack in a movie. So, choreographic narrative is all about using dance to make the story come alive and show what is happening in a fun and creative way.
+> (more complete + clearer + grounded)
 
 </details>
 
 <details>
 <summary><strong>Dataset v2 — 5k ablation (same config)</strong></summary>
 
-> Choreographic narrative is like telling a story through dance... (teacher tone preserved, but noticeably shorter)
+> Choreographic narrative is like telling a story through dance. Imagine when you act out a scene from a book or a movie. You might use your body to show how a character feels or what they are doing. In dance, choreographers use movements to tell a story or show an idea. It's like when you make up a dance to your favorite song! 
+> (teacher tone preserved, but noticeably shorter)
 
 </details>
 
