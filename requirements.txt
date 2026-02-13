@@ -1,0 +1,26 @@
+# Core
+numpy>=1.24,<3
+pandas>=2.0,<3
+tqdm>=4.66,<5
+pyyaml>=6.0,<7
+python-dotenv>=1.0,<2
+
+# ML / LLM training
+torch>=2.1,<3
+transformers>=4.41,<5
+datasets>=2.19,<3
+accelerate>=0.30,<1
+trl>=0.9,<1
+peft>=0.11,<1
+bitsandbytes>=0.43,<1
+sentencepiece>=0.1.99,<1
+einops>=0.7,<1
+
+# OpenAI API (dataset generation + LLM-as-judge)
+openai>=1.40,<2
+
+# Data splitting / sampling
+scikit-learn>=1.3,<2
+
+# Optional: baseline CPU inference using GGUF (only if you use ctransformers scripts)
+ctransformers>=0.2.27,<1

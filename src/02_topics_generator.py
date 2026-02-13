@@ -1,16 +1,23 @@
 import argparse
 import json
-import logging
 import os
 import time
 import pandas as pd
 import openai
 from dotenv import load_dotenv
 
+# Import centralized configurations and shared utilities
+from src.config import (
+    TOPIC_COMPLEX_CSV, 
+    TOPIC_SIMPLE_MINI_CSV, 
+    TOPIC_SIMPLE_4O_CSV
+)
+from src.utils import setup_logging, ensure_dir, logging
+
 # -----------------------------
 # 1) CONFIGURATION AND API SETUP
 # -----------------------------
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+setup_logging() # Utilizes centralized logging format
 load_dotenv()
 
 client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -95,19 +102,18 @@ def main():
     parser.add_argument("--model", choices=["gpt-4o", "gpt-4o-mini"], required=True)
     args = parser.parse_args()
 
-    # Determine output path and configuration based on mode and model
+    # Determine output path and configuration based on mode and model using config.py
     if args.mode == "complex":
         taxonomy = TAXONOMY_COMPLEX
         key_name = "concepts"
-        output_file = "master_topic_list_complex_mini.csv"
+        output_path = TOPIC_COMPLEX_CSV
         sys_prompt_base = COMPLEX_PROMPT
     else:
         taxonomy = TAXONOMY_SIMPLE
         key_name = "questions"
         sys_prompt_base = SIMPLE_GENERAL_PROMPT
         # Naming convention follows model choice for simple questions
-        suffix = "4o" if args.model == "gpt-4o" else "4o_mini"
-        output_file = f"master_topic_list_tagged_{suffix}.csv"
+        output_path = TOPIC_SIMPLE_4O_CSV if args.model == "gpt-4o" else TOPIC_SIMPLE_MINI_CSV
 
     all_topics = []
     logging.info(f"Starting {args.mode} generation using {args.model}...")
@@ -141,11 +147,9 @@ def main():
                     count += 1
             time.sleep(1)
 
-    # Persistence of unique topics to CSV
+    # Persistence of unique topics to CSV using utility directory management
     df = pd.DataFrame(all_topics).drop_duplicates(subset=["question"])
-    output_dir = "data/01_raw"
-    os.makedirs(output_dir, exist_ok=True)
-    output_path = os.path.join(output_dir, output_file)
+    ensure_dir(output_path)
     df.to_csv(output_path, index=False)
     logging.info(f"Saved {len(df)} entries to {output_path}")
 

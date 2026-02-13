@@ -1,57 +1,41 @@
 from ctransformers import AutoModelForCausalLM
 import json
 import os
-import logging
 from tqdm.auto import tqdm
+
+# Import centralized configurations and shared utilities
+from src.config import PRO_DIR
+from src.utils import setup_logging, load_jsonl, ensure_dir, logging
 
 # -----------------------------
 # 1) LOGGING AND CONFIGURATION
 # -----------------------------
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+setup_logging() # Replaces standard basicConfig
 
-# Specification of GGUF quantized model for resource-constrained environments
+# Specification of GGUF quantized model preserved
 MODEL_REPO = "TheBloke/Mistral-7B-Instruct-v0.2-GGUF"
 MODEL_FILE = "mistral-7b-instruct-v0.2.Q4_K_M.gguf" 
 
-# File path definitions for validation and result persistence
-VALIDATION_FILE = "data/04_processed/prototype/validation.jsonl"
+# File path definitions utilizing centralized config paths
+VALIDATION_FILE = os.path.join(PRO_DIR, "prototype/validation.jsonl")
 OUTPUT_FILE = "results_prototype/baseline_validation_results.jsonl"
 
 # -----------------------------
-# 2) DATA UTILITIES
-# -----------------------------
-def load_jsonl(filepath):
-    """Loads records from a JSONL file into a list of dictionaries."""
-    data = []
-    if not os.path.exists(filepath):
-        logging.error(f"Input file not found: {filepath}")
-        return []
-    try:
-        with open(filepath, 'r', encoding="utf-8") as f:
-            for line in f:
-                try:
-                    data.append(json.loads(line))
-                except json.JSONDecodeError:
-                    continue
-    except Exception as e:
-        logging.error(f"Error reading JSONL file: {e}")
-        return []
-    return data
-
-# -----------------------------
-# 3) MAIN INFERENCE ENGINE
+# 2) MAIN INFERENCE ENGINE
 # -----------------------------
 def main():
     """Executes baseline generation using CPU-optimized quantized Mistral weights."""
     logging.info(f"Starting baseline generation using CPU-Optimized {MODEL_REPO}...")
 
-    # Data ingestion phase
-    validation_data = load_jsonl(VALIDATION_FILE)
-    if not validation_data:
+    # Data ingestion using centralized load utility
+    # Note: load_jsonl in utils returns a DataFrame; we convert to list of dicts to match original loop
+    df_val = load_jsonl(VALIDATION_FILE)
+    if df_val.empty:
         logging.error("No validation data found. Execution terminated.")
         return
+    validation_data = df_val.to_dict('records')
     
-    # Initialization of quantized model for CPU execution
+    # Initialization of quantized model for CPU execution preserved
     # Parameter gpu_layers=0 ensures execution remains on host processor RAM
     try:
         logging.info("Loading model into RAM...")
@@ -68,10 +52,10 @@ def main():
 
     logging.info("Model loaded. Commencing generation loop...")
 
-    # Output directory creation
-    os.makedirs(os.path.dirname(OUTPUT_FILE), exist_ok=True)
+    # Output directory creation using centralized utility
+    ensure_dir(OUTPUT_FILE)
 
-    # Generation and persistence of baseline results
+    # Generation and persistence of baseline results logic strictly preserved
     with open(OUTPUT_FILE, 'w') as f:
         for item in tqdm(validation_data, desc="Generating answers"):
             input_text = item['input']
@@ -80,7 +64,7 @@ def main():
             formatted_prompt = f"<s>[INST] {input_text} [/INST]"
 
             try:
-                # Execution of text generation with configured sampling parameters
+                # Execution of text generation with original sampling parameters
                 generated_text = llm(
                     formatted_prompt, 
                     max_new_tokens=512, 
@@ -88,7 +72,7 @@ def main():
                     top_p=0.95
                 )
                 
-                # Compilation of input, target, and baseline output for evaluation
+                # Compilation of input, target, and baseline output preserved
                 result_data = {
                     "input": input_text,
                     "expected_output": item['output'],

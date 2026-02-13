@@ -1,14 +1,15 @@
 import pandas as pd
-import logging
 import os
 import json
 
-# Configuration for system logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+# Import centralized configurations and shared utilities
+from src.config import ELI5_REWRITTEN_JSONL, CURATION_SAMPLE_CSV
+from src.utils import setup_logging, ensure_dir, load_jsonl, logging
 
-# File path definitions for curation
-INPUT_JSONL = "data/02_generated/eli5_dataset_rewritten_complex.jsonl"
-OUTPUT_REVIEW_CSV = "data/03_curated/review_sample.csv"
+# -----------------------------
+# 1) CONFIGURATION
+# -----------------------------
+setup_logging() # Replaces standard basicConfig
 
 # Sampling ratio for general categories
 SAMPLE_RATE = 0.1
@@ -17,32 +18,15 @@ SAMPLE_RATE = 0.1
 SAFETY_CATEGORY = "Safety/Refusal"
 RANDOM_SEED = 42
 
-def load_jsonl(filepath):
-    """Loads records from a JSONL file into a structured DataFrame."""
-    data = []
-    if not os.path.exists(filepath):
-        logging.error(f"Input filepath not found: {filepath}")
-        return pd.DataFrame()
-    
-    logging.info(f"Loading data from {filepath}...")
-    try:
-        with open(filepath, 'r', encoding="utf-8") as f:
-            for line in f:
-                try:
-                    data.append(json.loads(line))
-                except json.JSONDecodeError:
-                    logging.warning("Skipping corrupted line in JSONL file.")
-                    continue
-    except Exception as e:
-        logging.error(f"Error reading JSONL file: {e}")
-        return pd.DataFrame()
-    return pd.DataFrame(data)
-
+# -----------------------------
+# 2) CORE EXECUTION LOGIC
+# -----------------------------
 def main():
     """Executes stratified sampling to create a representative subset for manual review."""
     logging.info("Starting data curation sampling process...")
 
-    df_raw = load_jsonl(INPUT_JSONL)
+    # Utilize centralized utility and config for loading
+    df_raw = load_jsonl(ELI5_REWRITTEN_JSONL)
     if df_raw.empty:
         return
     
@@ -65,6 +49,7 @@ def main():
         return group.sample(n=n_samples, random_state=RANDOM_SEED)
     
     logging.info("Performing stratified sampling by subject area...")
+    # Original sampling logic strictly preserved
     df_samples = df_raw.groupby("subject_area", group_keys=False).apply(sample_group)
 
     # Assignment of review status metadata
@@ -80,19 +65,18 @@ def main():
 
     logging.info(f"Sampling complete. {len(df_sample)} records selected ({len(df_sample)/len(df_raw)*100:.2f}% coverage).")
 
-    # Storage of review set to CSV for spreadsheet accessibility
-    if OUTPUT_REVIEW_CSV:
-        os.makedirs(os.path.dirname(OUTPUT_REVIEW_CSV), exist_ok=True)
+    # Storage utilizing config path and utility directory management
+    ensure_dir(CURATION_SAMPLE_CSV)
     
-    # Column selection relevant for manual pedagogical and safety auditing
+    # Column selection relevant for manual pedagogical and safety auditing preserved
     columns_for_review = [
         'review_status', 'subject_area', 'complexity', 'input', 'output', 
         'teacher_reflection', 'original_index', 'generating_model'
     ]
     final_columns = [col for col in columns_for_review if col in df_sample.columns]
     
-    df_sample[final_columns].to_csv(OUTPUT_REVIEW_CSV, index=False)
-    logging.info(f"Review sample persisted to {OUTPUT_REVIEW_CSV}")
+    df_sample[final_columns].to_csv(CURATION_SAMPLE_CSV, index=False)
+    logging.info(f"Review sample persisted to {CURATION_SAMPLE_CSV}")
 
 if __name__ == "__main__":
     main()

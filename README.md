@@ -1,123 +1,255 @@
-# ELI5 Teacher-Bot: Data-Centric Fine-Tuning of Mistral-7B
+# ELI5 Teacher Bot: Fine‑Tuning Mistral‑7B for K–12 Explanations
 
-## Introduction
-This project presents an end-to-end pipeline for fine-tuning a Large Language Model (**Mistral-7B-Instruct-v0.2**) to adopt a specific persona: an "Award-Winning K-12 Educator."
+This project builds an end‑to‑end pipeline to fine‑tune **Mistral‑7B‑Instruct v0.2** into an “Explain Like I’m 5” assistant that explains questions the way an award‑winning K–12 teacher would:
 
-While generic LLMs are capable of simplification, they typically suffer from two extremes: they either hallucinate facts to sound simple (often inventing fake titles or events) or remain too technical for a young audience, providing dry dictionary definitions. Furthermore, standard benchmarks like MMLU are designed for exam performance, not pedagogical clarity.
+- **Age‑appropriate**: ELI5 (5–8) vs ELI12 (9–12)  
+- **Factual + simple** (without turning into a dry dictionary definition)  
+- **Uses examples/analogies when helpful**  
+- **Safety aware**: refuses / redirects on unsafe or professional‑advice requests  
 
-My system tackles these fundamental challenges by implementing a **Data-Centric AI** approach. Instead of relying solely on hyperparameter tuning, I engineered a custom, iterative dataset generation process. I demonstrated that improving data quality—specifically through an **agentic rewriting pipeline** that enforces analogies—yields significantly higher performance gains than model architecture tweaks. The final model is optimized using **QLoRA** (4-bit quantization + LoRA adapters) and rigorously validated using a novel **Multicall LLM-as-a-Judge** framework.
+Training uses **QLoRA** (4‑bit quantization + LoRA adapters) so the pipeline is practical on consumer GPUs / Colab.
 
-## Key Features
-My system ensures high-quality pedagogical interactions through several advanced features:
+---
 
-*   **Custom "Curious Child" Taxonomy:** A synthetic dataset of 8,000+ examples generated via a custom taxonomy, covering STEM, Humanities, and "Sensitive" topics.
-*   **Agentic Data Refinement:** Implements a secondary "Teacher Agent" pipeline that reviews and rewrites complex training examples to enforce the use of vivid analogies and natural flow.
-*   **Safety-First Architecture:** Explicitly trained on "refusal" triggers to handle unsafe queries (e.g., medical advice, dangerous acts) by validating inputs before answering.
-*   **Efficient QLoRA Training:** Fine-tunes a 7B parameter model on consumer hardware using 4-bit quantization and Low-Rank Adapters (LoRA).
-*   **Multicall Evaluation Engine:** A robust evaluation harness that mitigates single-judge bias by performing four distinct assessment calls (Safety, Accuracy, Age-Fit, Analogy) per generated answer.
+## Why this project exists
 
-## Technical Architecture & Implementation
-This project was an exercise in rigorous experimental design, moving from a failing prototype to a robust final model through data engineering.
+Generic LLMs can “simplify,” but they often fail in two ways:
 
-### 1. Data Acquisition: The Pivot from MMLU
-My project began with the goal of using the **cais/mmlu** benchmark for training data. However, extensive analysis revealed that MMLU questions were too specific or multiple-choice focused to represent the natural, open-ended curiosity of a child.
+1) **Too technical**: correct but not accessible for kids  
+2) **Over‑simplified**: short and friendly, but missing key nuance  
+3) **Safety edge cases**: sensitive questions (medical/safety) require refusal or redirection  
 
-**The Solution:** I pivoted to a generative approach. I designed a custom taxonomy of **2,500+ topics** ranging from simple curiosity (*"Why is the sky blue?"*) to complex abstractions (*"Quantum Entanglement"*). I built a script (`02_topic_generation.py`) utilizing GPT-4o to generate unique questions across three complexity tiers: Simple (ELI5), Complex (ELI12), and Safety/Refusal.
+Key learning from this project: **data quality mattered more than hyperparameter tweaking** for teacher‑style behavior. When the tuned model underperformed on complex questions, the biggest improvement came from regenerating and rewriting training data—*not* from repeatedly tuning training knobs.
 
-### 2. The "Quality Bottleneck" & Agentic Regeneration
-After training an initial prototype (Dataset V1), evaluations showed the model was "safe but shallow"—it provided correct dictionary definitions but lacked teaching instinct. It failed to use examples or analogies effectively.
+---
 
-**The Engineering Fix:** I identified that hyperparameter tuning would not solve this semantic gap. Instead, I built a **Regeneration Pipeline** (`06_regenerate_answer...`). This script acted as a "Senior Editor," taking the initial synthetic answers and rewriting them with strict constraints:
-*   *Do not use rigid headers.*
-*   *Use a natural conversational flow.*
-*   *You MUST include a concrete analogy (e.g., 'like a pirate swaying').*
+## Key features
 
-**Result:** This data intervention proved to be the single biggest driver of performance.
+- **Custom “Curious Child” taxonomy** to generate a balanced dataset across STEM, humanities, arts/everyday life, and safety/refusal prompts.
+- **Prompt-driven data refinement** (data-centric iteration): rewrote the teacher prompt to enforce clearer ELI12 explanations with natural flow and explicit examples.
+- **QLoRA fine‑tuning** on Mistral‑7B (4‑bit NF4 + LoRA adapters) to keep training feasible.
+- **LLM-as-Judge evaluation evolution (v1 → v2 → v3)**:
+  - v1: coarse single-call score
+  - v2: structured scoring with targets
+  - v3: **multicall** (Safety / Accuracy / Age-fit / Analogy), plus deterministic shuffling to reduce order bias
 
-**Experiment A: The Data Pivot (Dataset V1 vs V2)**
-*Comparison of model behavior before and after regenerating the "Complex" training examples.*
+---
 
-| Feature | Dataset V1 (Old) | Dataset V2 (New/Regenerated) |
-| :--- | :--- | :--- |
-| **Model** | `Optimized Model` | `RunA / ckpt425` |
-| **Analogy Quality** | **Generic.** *"It's like acting out a play."* | **Specific & Vivid.** *"Like a pirate swaying or a princess twirling."* |
-| **Avg Judge Score** | ~7.7 - 8.3 | **9.2 - 9.3** |
-| **Conclusion** | Safe but shallow. Dictionary definitions. | **True teaching.** Deconstructs concepts with imagery. |
+## Technical Architecture and Implementation
 
-### 3. Model Training (QLoRA & Hyperparameter Sweeps)
-I fine-tuned **Mistral-7B-Instruct-v0.2** using the HuggingFace `trl` library with 4-bit NF4 quantization. I ran multiple full-training runs to determine optimal settings.
+### 0) Starting point: MMLU topic extraction (and pivot)
+I initially extracted questions from **cais/mmlu** (STEM/humanities/professional subjects).  
+Problem: questions were exam‑like and too specific for “what kids actually ask,” so I pivoted to generating my own dataset.
 
-**Experiment B: Hyperparameter Sweep (RunA vs RunB vs RunC)**
-*Testing robustness on the new dataset.*
+Script: `01_topic_extraction.py`
 
-| Metric | RunA (Constant, r64) | RunB (Cosine, r64) | RunC (Cosine, r32) |
-| :--- | :--- | :--- | :--- |
-| **Min Val Loss** | 0.821 | 0.803 | 0.813 |
-| **Judge Accuracy** | 4.57 / 5.0 | 4.49 / 5.0 | 4.50 / 5.0 |
-| **Analogy Score** | 1.81 / 2.0 | 1.73 / 2.0 | 1.72 / 2.0 |
-| **Total Score** | **9.30** | 9.20 | 9.20 |
+---
 
-*   **Finding:** While Cosine (RunB) achieved lower *training loss*, Constant (RunA) achieved slightly higher *judge scores*. However, the difference is negligible (<1%).
-*   **Verdict:** The model architecture is robust; performance is saturated by the data quality.
+### 1) Building a custom dataset (taxonomy → topics → merged inputs)
+I generated:
+- **Simple curiosity questions** (“Why…?”, “How…?”)
+- **Complex concepts** requiring ELI12 explanations
+- **Safety/refusal prompts**
 
-### 4. Ablation Study: Volume vs. Depth
-To determine if the full dataset was necessary, I performed an ablation study by training a model on a stratified subset of **5,000 examples** (`Run5k`) versus the full **8,000+** dataset.
+I generated topics using both **GPT‑4o** and **GPT‑4o‑mini** (to compare diversity), then merged + deduped.
 
-**Experiment C: Ablation Study (5k vs 8k)**
-*Is 8,000 samples necessary?*
+Scripts:
+- `02_topic_generation.py`
+- `03_generated_topic_analysis.py`
+- `04_merge_topics.py`
 
-| Metric | Run5k (Ablation) | ckpt425 (Full 8k) | Delta |
-| :--- | :--- | :--- | :--- |
-| **Total Score** | 8.19 | **9.24** | +1.05 |
-| **Accuracy** | 3.64 | 4.42 | +0.78 |
-| **Avg Word Count** | ~47 words | ~103 words | +119% |
+---
 
-*   **Verdict:** 5k samples are sufficient to learn **Tone** (Age-Fit scores were identical), but insufficient for **Depth** (Accuracy scores dropped and answers became ~50% shorter).
+### 2) Teacher-style answer generation (Dataset v1)
+I used a teacher persona prompt to generate training targets in JSON:
+- `internal_reflection`
+- `explanation`
 
-### 5. Evaluation Strategy: Multicall LLM-as-a-Judge
-Evaluating generative text is notoriously difficult. My initial `v1` judge (a single 1-10 score) proved too noisy and subjective. I iterated to a `v3` **Multicall System**:
-*   **Methodology:** For every answer, the evaluation script makes **4 separate API calls**:
-    1.  **Safety Gate:** Classifies the question and checks if the model failed to refuse a harmful prompt.
-    2.  **Accuracy Judge (0-5):** Checks factual correctness.
-    3.  **Age-Fit Judge (0-3):** Checks if vocabulary matches the ELI5/ELI12 target.
-    4.  **Analogy Judge (0-2):** Specifically checks for the presence of helpful metaphors.
-*   **Bias Mitigation:** The order of models (Base vs. Tuned A vs. Tuned B) is randomized and seeded for every row to prevent positional bias.
+Script: `05_generate_answers.py`
 
-### Qualitative Comparison: "Choreographic Narrative"
-*How different models explain the same abstract concept.*
+---
 
-| Model | Output Summary | Score | Verdict |
-| :--- | :--- | :--- | :--- |
-| **Base Mistral** | *"Title: 'The Seasons' Dance' is a choreographic narrative..."* | **Failure** | Hallucinates a fake play. |
-| **Old Data (V1)** | *"It's like when you watch a movie... dancers show the story."* | **8/10** | Safe but generic. Dictionary definition. |
-| **New Data (RunA)** | *"Imagine you have a favorite book... like a pirate swaying or a princess twirling... usage of body language..."* | **10/10** | **Winner.** Specific, vivid imagery. Teaches the concept. |
-| **5k Ablation** | *"It's like when you make up a dance to your favorite song!"* | **9/10** | Correct tone, but **too short**. Lacks depth. |
+### 3) Prototype training (~1000 samples) to validate the loop
+Before spending hours on full training, I ran a prototype (~900 train / 100 val). Loss decreased and outputs qualitatively changed → green light for full training.
 
-## Getting Started
+Prototype metrics:
+
+| Step | Train Loss | Val Loss | Entropy | Num Tokens | Mean Token Acc |
+|---:|---:|---:|---:|---:|---:|
+| 25 | 1.336939 | 1.111256 | 1.176616 | 47055 | 0.690173 |
+| 50 | 0.932878 | 0.933495 | 1.027300 | 93176 | 0.711735 |
+
+---
+
+### 4) Full training on Dataset v1 + early evaluation (Judge v1 & v2)
+I trained on the full dataset (~7379 train / 820 val) and compared two configurations:
+
+**Dataset v1 — full-run configs**
+
+| Run Name | Scheduler | LoRA Rank | Batch Size | Min Val Step | Min Val Loss | Last Step | Last Val Loss |
+|---|---|---:|---:|---:|---:|---:|---:|
+| `unstable_full_const_r64_bs16` | constant | 64 | 16 | 425 | 0.819623 | 450 | 0.863269 |
+| `optimized_full_cosine_r32_bs32` | cosine | 32 | 32 | 200 | 0.815179 | 200 | 0.815179 |
+
+I evaluated these tuned models using two judge versions:
+
+- **LLM-as-Judge v1** (coarse single call, 1–10 score + rationale)
+- **LLM-as-Judge v2** (structured single call: classification + targets + subscores)
+
+Key learning: even when loss improved, the tuned model still struggled on **complex (ELI12) questions** → this looked like a **data quality** problem, not a pure hyperparameter problem.
+
+---
+
+### 5) Data iteration: rewrite complex answers (Dataset v2)
+Because complex questions were weak, I regenerated/re‑wrote the complex subset with a new prompt enforcing:
+
+- **Natural flow** (no rigid headings)
+- **ELI12 depth**
+- **At least one example/analogy**
+- Safety/refusal rows were preserved (not rewritten)
+
+Script: `06_regenerate_answers_for_complex_questions.py`
+
+---
+
+### 6) Dataset v2 training sweeps + final evaluation framework (Judge v3 multicall)
+For Dataset v2, I switched to **LLM-as-Judge v3 multicall**:
+
+- Safety gate: classification + per-answer violations  
+- Accuracy (0–5)  
+- Age-fit (0–3)  
+- Analogy quality (0–2)  
+- **Total = Accuracy + Age-fit + Analogy (0–10)**  
+- Deterministic shuffling to reduce position bias
+
+---
+
+### 7) 5k ablation (Dataset v2): do we need ~8k?
+I trained with **5k stratified samples** to test if dataset size mattered.
+
+Result: **5k produced shorter, simpler answers but lower overall accuracy**, while the full dataset (~8k) produced better overall results.
+
+---
+
+## Training setup (QLoRA)
+
+- Base model: `mistralai/Mistral-7B-Instruct-v0.2`
+- Quantization: 4‑bit NF4 (`bitsandbytes`)
+- LoRA adapters: target modules  
+  `q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj`
+- Trainer: `trl.SFTTrainer` + `SFTConfig`
+- Max sequence length: 1024
+- BF16 compute (when supported)
+
+---
+
+## Experiments & results (most important section)
+
+### A) Dataset v2 — Multicall evaluation (v3) summaries
+
+#### 1) Best checkpoint vs final weights (same training run)
+Evaluation set: **base vs ckpt425 vs final** (Dataset v2, `case1_lr2e4_const_r64_a16`)
+
+| Model | Mean Accuracy (0–5) | Mean Age-fit (0–3) | Mean Analogy (0–2) | **Mean Total (0–10)** |
+|---|---:|---:|---:|---:|
+| Base | 4.544 | 1.002 | 1.170 | **6.716** |
+| Final adapter (last weights) | 3.930 | 2.963 | 1.813 | **8.706** |
+| **Checkpoint‑425** | 4.419 | 2.990 | 1.817 | **9.226** |
+
+**Takeaway:** best checkpoint beat final weights → supports using best-checkpoint saving (`load_best_model_at_end=True`) and/or selecting the best checkpoint for inference.
+
+---
+
+#### 2) Best sweep vs best checkpoint (head-to-head)
+Evaluation set: **base vs ckpt425 vs runA**
+
+| Model | Mean Total (0–10) |
+|---|---:|
+| Base | 6.693 |
+| **ckpt425** | **9.167** |
+| **runA** | **9.153** |
+
+**Takeaway:** runA and ckpt425 are effectively tied (differences are tiny).
+
+---
+
+#### 3) Scheduler & rank sweep comparison
+Evaluation set: **runA vs runB vs runC** (all Dataset v2)
+
+| Run | LR | Scheduler | r | α | Min Val Loss (step) | Mean Total (0–10) |
+|---|---:|---|---:|---:|---:|---:|
+| **runA** | 1e‑4 | constant | 64 | 16 | 0.8214 (425) | **9.305** |
+| runB | 1e‑4 | cosine | 64 | 16 | **0.8032 (400)** | 9.195 |
+| runC | 1e‑4 | cosine | 32 | 8 | 0.8137 (400) | 9.203 |
+
+**Takeaway:** cosine achieved the lowest eval loss, but **did not translate into better teacher-style judge scores**.
+
+---
+
+#### 4) 5k ablation vs full (~8k)
+Evaluation set: **base vs ckpt425 vs run5k**
+
+| Model | Mean Total (0–10) |
+|---|---:|
+| Base | 6.779 |
+| **ckpt425 (full ~8k)** | **9.244** |
+| run5k | 8.189 |
+
+**Takeaway:** 5k keeps teacher tone but **full data improves accuracy and completeness**.
+
+---
+
+## Qualitative examples (from evaluation logs)
+
+<details>
+<summary><strong>Example 1 — “Chronic disease management”</strong></summary>
+
+| Model | v3 Total | Output (unedited) |
+|---|---:|---|
+| Base | 7/10 | (Long, technical explanation) |
+| Run5k | 9/10 | “Chronic disease management is like taking care of a garden…” (simple but shorter) |
+| **ckpt425** | **10/10** | Clear definition + daily habits + analogy + accurate framing |
+
+</details>
+
+<details>
+<summary><strong>Example 2 — “Crowdfunding”</strong></summary>
+
+| Model | v3 Total | Output (unedited) |
+|---|---:|---|
+| Base | 6/10 | Correct but verbose/technical |
+| ckpt425 | 9/10 | Clear analogy + simple explanation |
+| **runA** | **10/10** | Clear definition + simple steps + strong structure |
+
+</details>
+
+---
+
+## How to run the pipeline
+
 ### Prerequisites
-*   Python 3.10+
-*   GPU with at least 24GB VRAM (recommended for training) or CPU (for GGUF inference)
-*   OpenAI API Key (for Data Generation & Evaluation)
+- Python 3.10+
+- GPU recommended for QLoRA training
+- OpenAI API key (dataset generation + judge evaluation)
 
-### Installation
-1.  Clone the repository:
-    ```bash
-    git clone [REPO_URL]
-    cd ELI5-Teacher-Bot
-    pip install -r requirements.txt
-    ```
+### Install
+```bash
+git clone https://github.com/DarshiniMH/ELI5-Teacher-Bot.git
+cd ELI5-Teacher-Bot
+pip install -r requirements.txt
 
-### Pipeline Execution
-1.  **Data Generation:** 
-    ```bash
-    python 05_generate_answers.py
-    python 06_regenerate_answer_for_complex_questions.py  # Crucial step for quality
-    ```
-2.  **Training:** 
-    ```bash
-    python 09_model_training.py
-    ```
-3.  **Evaluation:** 
-    ```bash
-    python 12_llm_judge_eval.py
-    ```
+
+
+## Pipeline Execution
+
+Follow these steps to reproduce the dataset generation, training, and evaluation process.
+
+### 1. Data Generation
+Generate the initial synthetic dataset and refine complex examples for higher quality.
+
+```bash
+# Generate initial dataset from source topics
+python 05_generate_answers.py
+
+# Refine complex questions (Crucial step for quality)
+python 06_regenerate_answer_for_complex_questions.py

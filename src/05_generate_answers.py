@@ -3,14 +3,17 @@ import pandas as pd
 import time
 import json
 import os
-import logging
 from dotenv import load_dotenv
 from tqdm.auto import tqdm
 
-# Configuration for system logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+# Import centralized configurations and shared utilities
+from src.config import TEACHER_MODEL, MERGED_TOPICS_CSV, ELI5_RAW_JSONL
+from src.utils import setup_logging, ensure_dir, logging
 
-# Initialization of environment variables for API authentication
+# -----------------------------
+# 1) API INITIALIZATION
+# -----------------------------
+setup_logging() # Standardized logging format
 load_dotenv()
 
 # Setup for the OpenAI client and validation of the API key
@@ -19,12 +22,10 @@ if not client.api_key:
     logging.error("Error: OPENAI_API_KEY is not found. Please check your .env file.")
     exit()
 
-# Model and file path definitions
-TEACHER_MODEL = "gpt-4o"
-INPUT_CSV = "../data/01_raw/merged_master_topic_list.csv"
-OUTPUT_JSONL = "../data/02_generated/eli5_dataset_raw.jsonl"
-
-# System prompt defining pedagogical style, safety protocols, and JSON output format
+# -----------------------------
+# 2) SYSTEM PROMPT (PEDAGOGICAL)
+# -----------------------------
+# Original educator persona and safety protocol strictly preserved
 SYSTEM_PROMPT = """You are an award-winning K-12 educator renowned for explaining complex concepts with exceptional clarity, enthusiasm, and factual accuracy. Your goal is to provide the simplest possible explanation tailored to a young audience (ages 5-12).
 
 # 1. ADAPTIVE STYLE (ELI5/ELI12)
@@ -57,7 +58,7 @@ def generate_explanation(input_text):
     for attempt in range(retries):
         try:
             response = client.chat.completions.create(
-                model = TEACHER_MODEL,
+                model = TEACHER_MODEL, # Managed via config.py
                 response_format= {"type": "json_object"},
                 messages = [
                     {"role": "system", "content": SYSTEM_PROMPT},
@@ -70,7 +71,7 @@ def generate_explanation(input_text):
             content = response.choices[0].message.content.strip()
             data = json.loads(content)
 
-            # Validation of required JSON keys
+            # Validation of required JSON keys preserved
             if 'internal_reflection' in data and "explanation" in data:
                 return data['internal_reflection'], data['explanation']
             else:
@@ -78,7 +79,7 @@ def generate_explanation(input_text):
                 continue
         
         except openai.RateLimitError:
-            # Exponential backoff for rate limiting
+            # Exponential backoff for rate limiting preserved
             wait_time = (2 ** attempt) * 10
             logging.warning(f"Rate limit exceeded. Retrying in {wait_time} seconds...")
             time.sleep(wait_time)
@@ -91,31 +92,29 @@ def main():
     """Main execution loop for dataset processing and session resumption."""
     logging.info(f"Starting answer generation using {TEACHER_MODEL}...")
 
-    # Input file verification
-    if not os.path.exists(INPUT_CSV):
-        logging.error(f"Input CSV not found:{INPUT_CSV}")
+    # Input file verification utilizing config path
+    if not os.path.exists(MERGED_TOPICS_CSV):
+        logging.error(f"Input CSV not found:{MERGED_TOPICS_CSV}")
         return
     
     # Dataset loading with error handling
     try:
-        df = pd.read_csv(INPUT_CSV, engine = 'python', on_bad_lines = 'skip', keep_default_na=False)
+        df = pd.read_csv(MERGED_TOPICS_CSV, engine = 'python', on_bad_lines = 'skip', keep_default_na=False)
     except Exception as e:
         logging.error(f"Error reading input CSV: {e}")
         return
     
-    logging.info(f"Loaded {len(df)} inputs from {INPUT_CSV}.")
+    logging.info(f"Loaded {len(df)} inputs from {MERGED_TOPICS_CSV}.")
 
     # Tracking of processed indices for resumption
     processed_indices = set()
-
-    if OUTPUT_JSONL:
-        os.makedirs(os.path.dirname(OUTPUT_JSONL), exist_ok = True)
+    ensure_dir(ELI5_RAW_JSONL) # Managed via utils.py
 
     # Recovery of previously processed records
-    if os.path.exists(OUTPUT_JSONL):
+    if os.path.exists(ELI5_RAW_JSONL):
         logging.info("Output file exists. checking for previous progress..")
         try:
-            with open(OUTPUT_JSONL, 'r') as f:
+            with open(ELI5_RAW_JSONL, 'r') as f:
                 for line in f:
                     try:
                         data = json.loads(line)
@@ -131,8 +130,8 @@ def main():
         if processed_indices:
             logging.info(f"Resuming. {len(processed_indices)} entries already processed.")
 
-    # Main processing and persistence loop
-    with open(OUTPUT_JSONL, 'a') as f:
+    # Main processing and persistence loop with original metadata fields
+    with open(ELI5_RAW_JSONL, 'a') as f:
         for index, row in tqdm(df.iterrows(), total=len(df), desc="Generating Answers"):
             # Skip indices present in the resume set
             if index in processed_indices:
@@ -166,7 +165,7 @@ def main():
             # Intentional pacing between API calls
             time.sleep(0.05)
     logging.info(f"\n--- Generation Complete ---")
-    logging.info(f"Saved raw dataset to {OUTPUT_JSONL}")
+    logging.info(f"Saved raw dataset to {ELI5_RAW_JSONL}")
 
 if __name__ == "__main__":
     main()

@@ -9,6 +9,10 @@ from transformers import TrainerCallback
 from peft import LoraConfig, prepare_model_for_kbit_training
 from trl import SFTTrainer, SFTConfig
 
+# Import centralized configurations and shared utilities
+from src.config import BASE_MODEL, PRO_DIR
+from src.utils import setup_logging, logging
+
 # -----------------------------
 # 0) HYPERPARAMETER CONFIGURATIONS
 # -----------------------------
@@ -26,12 +30,14 @@ cfg = RUN_CONFIGS[RUN_NAME]
 # -----------------------------
 # 1) DATASET INITIALIZATION
 # -----------------------------
-MODEL_NAME = "mistralai/Mistral-7B-Instruct-v0.2"
+setup_logging() # Standardized logging format
 
-TRAIN_FILE = "data/04_processed/full_revised/train_full_revised.jsonl"
-VAL_FILE   = "data/04_processed/full_revised/validation_full_revised.jsonl"
+# Centralized model and data paths from config.py
+MODEL_NAME = BASE_MODEL
+TRAIN_FILE = os.path.join(PRO_DIR, "full_revised/train.jsonl")
+VAL_FILE   = os.path.join(PRO_DIR, "full_revised/validation.jsonl")
 
-# Subset size for ablation studies
+# Subset size for ablation studies preserved
 TRAIN_SUBSET_SIZE = None
 
 # Evaluation batch subset size
@@ -42,11 +48,11 @@ dataset = load_dataset(
     data_files={"train": TRAIN_FILE, "validation": VAL_FILE},
 )
 
-# Selection of training data subset
+# Selection of training data subset logic preserved
 if TRAIN_SUBSET_SIZE is not None:
     dataset["train"] = dataset["train"].shuffle(seed=123).select(range(TRAIN_SUBSET_SIZE))
 
-# Selection of validation data subset
+# Selection of validation data subset logic preserved
 eval_ds = dataset["validation"]
 if EVAL_SUBSET_SIZE is not None:
     eval_ds = eval_ds.select(range(min(EVAL_SUBSET_SIZE, len(eval_ds))))
@@ -64,24 +70,23 @@ ENABLE_RESUME_TO_DRIVE = True
 DRIVE_RESUME_ROOT = f"models/resume_checkpoints/{RUN_NAME}"
 os.makedirs(DRIVE_RESUME_ROOT, exist_ok=True)
 
+# Added to support SFTConfig path requirements for local check-pointing
+LOCAL_CKPT_DIR = f"./local_checkpoints/{RUN_NAME}" 
+
 # -----------------------------
 # 3) TRAINING FLOW PARAMETERS
 # -----------------------------
-# Step alignment for local saves and evaluation
 SAVE_STEPS_LOCAL = 25
 EVAL_STEPS = 25
 SAVE_TOTAL_LIMIT_LOCAL = 3
-
-# Frequency and capacity for resume checkpoints
 RESUME_TO_DRIVE_EVERY_STEPS = 250
 KEEP_LAST_N_RESUME_CKPTS = 2
-
-# Resumption status from external storage
 RESUME_FROM_DRIVE = False
 
 # -----------------------------
 # 4) TRAINER CALLBACKS
 # -----------------------------
+# Original logic for persisting optimal model states preserved
 class SaveBestAdapterToDriveCallback(TrainerCallback):
     """
     Persistence of LoRA adapter and tokenizer upon evaluation loss improvement.
@@ -144,7 +149,7 @@ class PeriodicResumeCheckpointToDriveCallback(TrainerCallback):
             shutil.rmtree(dst)
         shutil.copytree(src, dst)
 
-        # Cleanup of outdated checkpoints
+        # Cleanup of outdated checkpoints preserved
         ckpts = []
         for name in os.listdir(self.drive_root):
             if name.startswith("checkpoint-"):
@@ -179,6 +184,7 @@ def find_latest_checkpoint(root: str) -> str | None:
 # -----------------------------
 # 5) MODEL AND TOKENIZER SETUP
 # -----------------------------
+# Original bitsandbytes and PEFT setup strictly preserved
 bnb_config = BitsAndBytesConfig(
     load_in_4bit=True,
     bnb_4bit_quant_type="nf4",
@@ -277,7 +283,7 @@ if RESUME_FROM_DRIVE:
 
 trainer.train(resume_from_checkpoint=resume_path)
 
-# Final storage of optimized model and tokenizer
+# Final storage of optimized model and tokenizer preserved
 trainer.model.save_pretrained(DRIVE_BEST_ADAPTER_DIR)
 tokenizer.save_pretrained(DRIVE_BEST_ADAPTER_DIR)
 

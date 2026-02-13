@@ -1,68 +1,41 @@
 import argparse
-import pandas as pd
-import json
 import os
 from sklearn.model_selection import train_test_split
-import logging
 
-# Configuration for system logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+# Import centralized configurations and shared utilities
+from src.config import ELI5_REWRITTEN_JSONL, PRO_DIR
+from src.utils import setup_logging, load_jsonl, save_jsonl, logging
 
 # -----------------------------
 # 1) CONFIGURATION AND PATHS
 # -----------------------------
-INPUT_JSONL = "data/02_generated/eli5_dataset_rewritten_complex.jsonl"
+setup_logging()  # Replaces standard basicConfig
+
+# Configuration constants preserved
 RANDOM_SEED = 42
 TEST_SIZE = 0.1  # 10% allocation for validation
 
 # -----------------------------
-# 2) FILE UTILITIES
-# -----------------------------
-def load_jsonl(file_path):
-    """Loads records from a JSONL file into a pandas DataFrame."""
-    data = []
-    if not os.path.exists(file_path):
-        logging.error(f"Input file not found: {file_path}")
-        return pd.DataFrame()
-    try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            for line in f:
-                try:
-                    data.append(json.loads(line))
-                except json.JSONDecodeError:
-                    continue
-    except Exception as e:
-        logging.error(f"Error reading JSONL file: {e}")
-        return pd.DataFrame()
-    return pd.DataFrame(data)
-
-def save_jsonl(df, filepath):
-    """Persists specified columns of a DataFrame to a JSONL file."""
-    os.makedirs(os.path.dirname(filepath), exist_ok=True)
-    # Preservation of 'input' and 'output' columns only
-    df[['input', 'output']].to_json(filepath, orient='records', lines=True)
-    logging.info(f"Saved {len(df)} records to {filepath}")
-
-# -----------------------------
-# 3) CORE EXECUTION LOGIC
+# 2) CORE EXECUTION LOGIC
 # -----------------------------
 def main():
     parser = argparse.ArgumentParser(description="Consolidated Data Preparation Tool")
     parser.add_argument("--mode", choices=["full", "prototype"], required=True, help="Execution mode")
     args = parser.parse_args()
 
-    # Mode-specific directory and size configuration
+    # Mode-specific directory and size configuration utilizing config.py paths
     if args.mode == "full":
-        output_dir = "data/04_processed/full_revised"
+        # Paths now relative to centralized PRO_DIR
+        output_dir = os.path.join(PRO_DIR, "full_revised")
         prototype_size = None
         logging.info("Starting FULL data preparation...")
     else:
-        output_dir = "data/04_processed/smaller_dataset"
+        output_dir = os.path.join(PRO_DIR, "smaller_dataset")
         prototype_size = 5000
         logging.info("Starting PROTOTYPE data preparation...")
 
-    # Data loading phase
-    df_raw = load_jsonl(INPUT_JSONL)
+    # Data loading phase utilizing centralized utils and config
+    df_raw = load_jsonl(ELI5_REWRITTEN_JSONL)
     if df_raw.empty: 
         logging.error("No data loaded. Execution terminated.")
         return
@@ -70,7 +43,7 @@ def main():
     total_records = len(df_raw)
     logging.info(f"Loaded {total_records} total records.")
 
-    # Implementation of stratified sampling logic
+    # Implementation of stratified sampling logic preserved exactly
     try:
         stratify_key = df_raw['subject_area'] + "_" + df_raw.get('complexity', '')
         
@@ -91,8 +64,7 @@ def main():
         else:
             df_working = df_raw
 
-    # Final split into training and validation sets
-    # Stratification applied to the final split if possible
+    # Final split into training and validation sets preserved
     try:
         final_stratify = df_working['subject_area'] + "_" + df_working.get('complexity', '')
         df_train, df_val = train_test_split(
@@ -104,7 +76,7 @@ def main():
             df_working, test_size=TEST_SIZE, random_state=RANDOM_SEED
         )
 
-    # Persistence of processed datasets
+    # Persistence utilizing centralized save utility
     save_jsonl(df_train, os.path.join(output_dir, "train.jsonl"))
     save_jsonl(df_val, os.path.join(output_dir, "validation.jsonl"))
     

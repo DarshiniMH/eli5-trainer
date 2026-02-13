@@ -1,54 +1,73 @@
 import pandas as pd
+# Import centralized configurations and shared utilities
+from src.config import TOPIC_SIMPLE_MINI_CSV, TOPIC_SIMPLE_4O_CSV
+from src.utils import setup_logging, logging
 
-file_mini = "data/01_raw/master_topic_list_tagged_4o_mini.csv"
-file_4o = "data/01_raw/master_topic_list_tagged_4o.csv"
+# -----------------------------
+# 1) LOGGING AND DATA LOADING
+# -----------------------------
+setup_logging() # Standardized logging format
 
-try:
-    df_mini = pd.read_csv(file_mini)
-    df_4o = pd.read_csv(file_4o)
-
-except FileNotFoundError as e:
-    print(f"Error: CSV file not found in the current directory.")
-    exit()
-
-print(f"Mini shape: {df_mini.shape}")
-print(f"4o shape:{df_4o.shape}\n")
-
-set_mini = set(df_mini['question'])
-set_4o = set(df_4o['question'])
-
-overlap = set_mini.intersection(set_4o)
-
-overlap_count = len(overlap)
-union_count = len(set_mini.union(set_4o))
-
-print(f"Total Unique Questions (if combined): {union_count}")
-print(f"Number of Identical Questions (Overlap): {overlap_count}")
-print(f"Overlap Percentage (vs Mini): {overlap_count / len(set_mini) * 100:.2f}%")
-
-def compare_samples(subject, num_samples = 10):
-    print(f"\n---- comparing samples: {subject}-----\n")
-
+def main():
+    """Performs comparative analysis between GPT-4o and GPT-4o-mini topic sets."""
     try:
-        samples_4o = df_4o[df_4o["subject_area"]==subject].sample(n = num_samples, random_state=42)
-        samples_mini = df_mini[df_mini["subject_area"]==subject].sample(n = num_samples, random_state = 42)
-    except ValueError as e:
-        print(f"Not enough samples for subject {subject}. Skipping sample comparison.")
-        samples_4o = df_4o[df_4o["subject_area"]==subject]
-        samples_mini = df_mini[df_mini["subject_area"]==subject]
-    
-    comparision_df = pd.DataFrame({
-        "GPT-4o-mini": samples_mini["question"].reset_index(drop = True),
-        "GPT-4o": samples_4o["question"].reset_index(drop = True)
-    })
+        # Utilizing centralized paths from config.py
+        df_mini = pd.read_csv(TOPIC_SIMPLE_MINI_CSV)
+        df_4o = pd.read_csv(TOPIC_SIMPLE_4O_CSV)
+        logging.info("Successfully loaded topic datasets for analysis.")
 
-    pd.set_option('display.max_colwidth', None)
-    print(comparision_df)
-    #display(comparision_df)
+    except FileNotFoundError as e:
+        logging.error(f"Error: CSV file not found. Ensure generation scripts were successful: {e}")
+        return
 
-compare_samples("Math/Logic")
-compare_samples("Physics")
-compare_samples("Genetics")
-compare_samples("Safety/Refusal")
+    # -----------------------------
+    # 2) OVERLAP ANALYSIS
+    # -----------------------------
+    # Original shape reporting logic preserved
+    print(f"Mini shape: {df_mini.shape}")
+    print(f"4o shape:{df_4o.shape}\n")
 
+    set_mini = set(df_mini['question'])
+    set_4o = set(df_4o['question'])
 
+    # Standard set mathematics for overlap detection
+    overlap = set_mini.intersection(set_4o)
+    overlap_count = len(overlap)
+    union_count = len(set_mini.union(set_4o))
+
+    print(f"Total Unique Questions (if combined): {union_count}")
+    print(f"Number of Identical Questions (Overlap): {overlap_count}")
+    print(f"Overlap Percentage (vs Mini): {overlap_count / len(set_mini) * 100:.2f}%")
+
+    # -----------------------------
+    # 3) SAMPLE COMPARISON UTILITY
+    # -----------------------------
+    def compare_samples(subject, num_samples=10):
+        """Original stratified sampling and comparison logic preserved."""
+        print(f"\n---- comparing samples: {subject}-----\n")
+
+        try:
+            # Deterministic sampling with random_state=42
+            samples_4o = df_4o[df_4o["subject_area"] == subject].sample(n=num_samples, random_state=42)
+            samples_mini = df_mini[df_mini["subject_area"] == subject].sample(n=num_samples, random_state=42)
+        except ValueError as e:
+            print(f"Not enough samples for subject {subject}. Skipping sample comparison.")
+            samples_4o = df_4o[df_4o["subject_area"] == subject]
+            samples_mini = df_mini[df_mini["subject_area"] == subject]
+        
+        comparison_df = pd.DataFrame({
+            "GPT-4o-mini": samples_mini["question"].reset_index(drop=True),
+            "GPT-4o": samples_4o["question"].reset_index(drop=True)
+        })
+
+        pd.set_option('display.max_colwidth', None)
+        print(comparison_df)
+
+    # Execute comparisons for original subject areas
+    compare_samples("Math/Logic")
+    compare_samples("Physics")
+    compare_samples("Genetics")
+    compare_samples("Safety/Refusal")
+
+if __name__ == "__main__":
+    main()
