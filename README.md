@@ -125,7 +125,8 @@ The **largest improvement** came from:
 1) **Dataset v1 → Dataset v2** (rewriting complex targets)  
 2) **8k+ data → 5k** (5k answers were often shorter and less complete)
 
-#### Example Answers: same config, different datasets 
+### Example Answers: 
+same config, different datasets 
 **Q: “what is choreographic narrative”**
 
 <details>
