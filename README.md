@@ -25,7 +25,7 @@ An end‑to‑end, **data‑centric** pipeline to fine‑tune **Mistral‑7B‑I
 
 ## Project evolution
 
-### 0) Pivot: MMLU → child‑curiosity data
+### 0) Pivot: MMLU → custom dataset
 I started by extracting topics from **cais/mmlu**, but those questions were **exam‑style** and too specific for “what kids actually ask.”  
 So I pivoted to a custom taxonomy and generated my own dataset.
 
@@ -103,7 +103,7 @@ Total score for **Normal** questions = Accuracy + Age‑fit + Analogy (0–10)
 
 ## Results
 
-### A) Quantitative (by judge numbers — v3 multicall, Normal questions only)
+### A) Quantitative 
 
 **v3 Multicall summary**
 
@@ -114,18 +114,18 @@ Total score for **Normal** questions = Accuracy + Age‑fit + Analogy (0–10)
 | base vs ckpt425 vs runA | 802 | base **6.69**, ckpt425 **9.17**, runA **9.15** | **ckpt425 (tiny edge)** | **61.1%** |
 | base vs ckpt425 vs run5k | 804 | base **6.78**, ckpt425 **9.24**, run5k **8.19** | **ckpt425** | 26.7% |
 
-**What this means (numbers-only):**
-- **Big gaps**: ckpt425 ≫ base, and full‑data (8k) ≫ run5k.
-- **Small gaps**: runA/runB/runC/ckpt425 are all **within ~0.1** mean score and have **many ties** → basically the same tier.
 
-### B) Qualitative (by reading answers)
+- **Visible improvements**: ckpt425 ≫ base, and full‑data (8k) ≫ run5k.
+- **Small improvements**: runA/runB/runC/ckpt425 are all **within ~0.1** mean score and have **many ties** → basically the same tier.
+
+### B) Qualitative 
 Across **Dataset v2**, the “best” configs (**ckpt425, runA, runB, runC**) produce **very similar quality**. Differences are usually minor (wording/formatting/detail level).
 
-The **largest visible improvement** came from:
+The **largest improvement** came from:
 1) **Dataset v1 → Dataset v2** (rewriting complex targets)  
 2) **8k+ data → 5k** (5k answers were often shorter and less complete)
 
-#### Example: same config, different datasets (clear data effect)
+#### Example Answers: same config, different datasets 
 **Q: “what is choreographic narrative”**
 
 <details>
