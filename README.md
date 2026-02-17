@@ -23,7 +23,7 @@ An end‑to‑end, **data‑centric** pipeline to fine‑tune **Mistral‑7B‑I
 
 ---
 
-## Project evolution (what changed and why)
+## Project evolution
 
 ### 0) Pivot: MMLU → child‑curiosity data
 I started by extracting topics from **cais/mmlu**, but those questions were **exam‑style** and too specific for “what kids actually ask.”  
