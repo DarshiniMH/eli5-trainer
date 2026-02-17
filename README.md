@@ -126,7 +126,8 @@ The **largest improvement** came from:
 2) **8k+ data → 5k** (5k answers were often shorter and less complete)
 
 ### Example Answers: 
-same config, different datasets 
+same config, different datasets
+
 **Q: “what is choreographic narrative”**
 
 <details>
