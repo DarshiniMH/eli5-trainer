@@ -5,13 +5,14 @@ import json
 import os
 from dotenv import load_dotenv
 from tqdm.auto import tqdm
+import hydra
+from omegaconf import DictConfig
 
-# Import centralized configurations and shared utilities
-from src.config import TEACHER_MODEL, MERGED_TOPICS_CSV, ELI5_RAW_JSONL
+# Import centralized shared utilities only
 from src.utils import setup_logging, ensure_dir, logging
 
 # -----------------------------
-# 1) API INITIALIZATION
+# API INITIALIZATION
 # -----------------------------
 setup_logging() # Standardized logging format
 load_dotenv()
@@ -23,7 +24,7 @@ if not client.api_key:
     exit()
 
 # -----------------------------
-# 2) SYSTEM PROMPT (PEDAGOGICAL)
+# SYSTEM PROMPT (PEDAGOGICAL)
 # -----------------------------
 # Original educator persona and safety protocol strictly preserved
 SYSTEM_PROMPT = """You are an award-winning K-12 educator renowned for explaining complex concepts with exceptional clarity, enthusiasm, and factual accuracy. Your goal is to provide the simplest possible explanation tailored to a young audience (ages 5-12).
@@ -52,20 +53,19 @@ Provide the output strictly as a JSON object with keys:
 "explanation": Final explanation text.
 """
 
-def generate_explanation(input_text):
+def generate_explanation(input_text, model_name, temp, max_tokens, retries):
     """Executes API request to generate pedagogical explanations with retry logic."""
-    retries = 3
     for attempt in range(retries):
         try:
             response = client.chat.completions.create(
-                model = TEACHER_MODEL, # Managed via config.py
-                response_format= {"type": "json_object"},
-                messages = [
+                model=model_name,
+                response_format={"type": "json_object"},
+                messages=[
                     {"role": "system", "content": SYSTEM_PROMPT},
                     {"role": "user", "content": input_text}
                 ],
-                temperature=0.6,
-                max_tokens = 1024
+                temperature=temp,
+                max_tokens=max_tokens
             )
 
             content = response.choices[0].message.content.strip()
@@ -88,33 +88,45 @@ def generate_explanation(input_text):
             time.sleep(20)
     return None, None
 
-def main():
+
+@hydra.main(version_base=None, config_path="../conf", config_name="config")
+def main(cfg: DictConfig):
     """Main execution loop for dataset processing and session resumption."""
-    logging.info(f"Starting answer generation using {TEACHER_MODEL}...")
+    # Pull constants from Hydra
+    teacher_model = cfg.models.teacher
+    input_csv = cfg.files.merged_topics_csv
+    output_jsonl = cfg.files.eli5_raw_jsonl
+    
+    gen_temp = cfg.teacher_generation.temperature
+    gen_tokens = cfg.teacher_generation.max_tokens
+    gen_retries = cfg.teacher_generation.retries
+    sleep_sec = cfg.teacher_generation.sleep_sec
+
+    logging.info(f"Starting answer generation using {teacher_model}...")
 
     # Input file verification utilizing config path
-    if not os.path.exists(MERGED_TOPICS_CSV):
-        logging.error(f"Input CSV not found:{MERGED_TOPICS_CSV}")
+    if not os.path.exists(input_csv):
+        logging.error(f"Input CSV not found:{input_csv}")
         return
     
     # Dataset loading with error handling
     try:
-        df = pd.read_csv(MERGED_TOPICS_CSV, engine = 'python', on_bad_lines = 'skip', keep_default_na=False)
+        df = pd.read_csv(input_csv, engine='python', on_bad_lines='skip', keep_default_na=False)
     except Exception as e:
         logging.error(f"Error reading input CSV: {e}")
         return
     
-    logging.info(f"Loaded {len(df)} inputs from {MERGED_TOPICS_CSV}.")
+    logging.info(f"Loaded {len(df)} inputs from {input_csv}.")
 
     # Tracking of processed indices for resumption
     processed_indices = set()
-    ensure_dir(ELI5_RAW_JSONL) # Managed via utils.py
+    ensure_dir(output_jsonl)
 
     # Recovery of previously processed records
-    if os.path.exists(ELI5_RAW_JSONL):
+    if os.path.exists(output_jsonl):
         logging.info("Output file exists. checking for previous progress..")
         try:
-            with open(ELI5_RAW_JSONL, 'r') as f:
+            with open(output_jsonl, 'r') as f:
                 for line in f:
                     try:
                         data = json.loads(line)
@@ -130,8 +142,10 @@ def main():
         if processed_indices:
             logging.info(f"Resuming. {len(processed_indices)} entries already processed.")
 
+    
+
     # Main processing and persistence loop with original metadata fields
-    with open(ELI5_RAW_JSONL, 'a') as f:
+    with open(output_jsonl, 'a') as f:
         for index, row in tqdm(df.iterrows(), total=len(df), desc="Generating Answers"):
             # Skip indices present in the resume set
             if index in processed_indices:
@@ -142,7 +156,14 @@ def main():
                 logging.warning(f"Empty question at index {index}. Skipping.")
                 continue
 
-            reflection, explanation = generate_explanation(question)
+            # Pass Hydra configurations to the generation function
+            reflection, explanation = generate_explanation(
+                input_text=question, 
+                model_name=teacher_model, 
+                temp=gen_temp, 
+                max_tokens=gen_tokens, 
+                retries=gen_retries
+            )
 
             # Record persistence and disk synchronization
             if explanation:
@@ -162,10 +183,11 @@ def main():
             else:
                 logging.error(f"Failed to generate explanation for index {index}. Skipping.")
 
-            # Intentional pacing between API calls
-            time.sleep(0.05)
+            # Pacing between API calls using Hydra config
+            time.sleep(sleep_sec)
+            
     logging.info(f"\n--- Generation Complete ---")
-    logging.info(f"Saved raw dataset to {ELI5_RAW_JSONL}")
+    logging.info(f"Saved raw dataset to {output_jsonl}")
 
 if __name__ == "__main__":
     main()

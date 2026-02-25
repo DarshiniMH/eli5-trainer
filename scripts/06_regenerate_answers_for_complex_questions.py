@@ -4,32 +4,20 @@ import time
 from typing import Dict, Any, Optional
 from tqdm.auto import tqdm
 from openai import OpenAI, RateLimitError, APIError
+import hydra
+from omegaconf import DictConfig
 
-# Import centralized configurations and shared utilities
-from src.config import TEACHER_MODEL, ELI5_RAW_JSONL, ELI5_REWRITTEN_JSONL
+# Import centralized shared utilities only
 from src.utils import setup_logging, ensure_dir, logging
 
 # -----------------------------
-# 1) CONFIGURATION AND API SETUP
+# CONFIGURATION AND API SETUP
 # -----------------------------
 setup_logging()
-
-# Integration of OpenAI client using centralized model configuration
 client = OpenAI()
 
-# Processing constraints and pace control
-LIMIT_ROWS = None
-SLEEP_SEC = 0.05
-MAX_RETRIES = 3
-
-# Threshold for content elaboration length (ELI12 targets)
-MIN_COMPLEX_WORDS = 160
-
-# Synchronization flag for persistent storage reliability
-FORCE_DRIVE_SYNC = True
-
 # -----------------------------
-# 2) REWRITING SYSTEM PROMPT
+# REWRITING SYSTEM PROMPT
 # -----------------------------
 SYSTEM_PROMPT_COMPLEX_NATURAL = """
 You are a K–12 teacher explaining for ages 9–12 (ELI12).
@@ -50,7 +38,7 @@ Return JSON only:
 """.strip()
 
 # -----------------------------
-# 3) CLASSIFICATION UTILITIES
+# CLASSIFICATION UTILITIES
 # -----------------------------
 def word_count(text: str) -> int:
     """Returns the total number of words in a string for length validation."""
@@ -81,7 +69,7 @@ def is_safety_refusal_row(row: Dict[str, Any]) -> bool:
     return False
 
 # -----------------------------
-# 4) PERSISTENCE AND RESUME LOGIC
+# PERSISTENCE AND RESUME LOGIC
 # -----------------------------
 def load_done_ids(output_path: str) -> set:
     """Retrieves processed indices from output file to support session resumption."""
@@ -100,14 +88,14 @@ def load_done_ids(output_path: str) -> set:
     return done
 
 # -----------------------------
-# 5) GENERATION INTERFACE
+# GENERATION INTERFACE
 # -----------------------------
-def _call_teacher(system_prompt: str, user_msg: str, temperature: float, max_tokens: int) -> Optional[str]:
+def _call_teacher(model_name: str, system_prompt: str, user_msg: str, temperature: float, max_tokens: int, max_retries: int) -> Optional[str]:
     """Executes API request with exponential backoff for rate limits."""
-    for attempt in range(MAX_RETRIES):
+    for attempt in range(max_retries):
         try:
             resp = client.chat.completions.create(
-                model=TEACHER_MODEL,
+                model=model_name,
                 response_format={"type": "json_object"},
                 messages=[
                     {"role": "system", "content": system_prompt},
@@ -129,61 +117,69 @@ def _call_teacher(system_prompt: str, user_msg: str, temperature: float, max_tok
             time.sleep(3)
     return None
 
-def rewrite_complex_natural(question: str, existing_answer: str, domain: str, subject: str) -> Optional[str]:
+def rewrite_complex_natural(question: str, existing_answer: str, domain: str, subject: str, cfg: DictConfig) -> Optional[str]:
     """Orchestrates the rewriting and optional expansion of complex answers."""
     user_msg = f"QUESTION: {question}\nDOMAIN: {domain}\nSUBJECT: {subject}\n\nEXISTING_ANSWER:\n{existing_answer}"
 
+    # Draft generation
     draft = _call_teacher(
+        model_name=cfg.models.teacher,
         system_prompt=SYSTEM_PROMPT_COMPLEX_NATURAL,
         user_msg=user_msg,
-        temperature=0.3,
-        max_tokens=1200,
+        temperature=cfg.rewriting.draft_temp,
+        max_tokens=cfg.rewriting.draft_max_tokens,
+        max_retries=cfg.rewriting.max_retries
     )
+    
     if not draft or looks_like_refusal(draft):
         return None
 
     # Expansion pass for ELI12 targets falling below word threshold
-    if word_count(draft) < MIN_COMPLEX_WORDS:
+    if word_count(draft) < cfg.rewriting.min_complex_words:
         expand_msg = f"Expand this for ages 9–12. Keep it natural. QUESTION: {question}\n\nDRAFT:\n{draft}"
         expanded = _call_teacher(
+            model_name=cfg.models.teacher,
             system_prompt=SYSTEM_PROMPT_COMPLEX_NATURAL,
             user_msg=expand_msg,
-            temperature=0.2,
-            max_tokens=1400,
+            temperature=cfg.rewriting.expand_temp,
+            max_tokens=cfg.rewriting.expand_max_tokens,
+            max_retries=cfg.rewriting.max_retries
         )
         if expanded and not looks_like_refusal(expanded):
             return expanded
+            
     return draft
 
 # -----------------------------
-# 6) MAIN EXECUTION LOOP
+# MAIN EXECUTION LOOP
 # -----------------------------
-def main():
+@hydra.main(version_base=None, config_path="../conf", config_name="config")
+def main(cfg: DictConfig):
     """Manages the processing pipeline including deduplication and file synchronization."""
-    ensure_dir(ELI5_REWRITTEN_JSONL)
-
-    done_ids = load_done_ids(ELI5_REWRITTEN_JSONL)
+    input_file = cfg.files.eli5_raw_jsonl
+    output_file = cfg.files.eli5_rewritten_jsonl
+    
+    ensure_dir(output_file)
+    done_ids = load_done_ids(output_file)
     logging.info(f"Resume enabled. Found {len(done_ids)} rows in output.")
 
-    # Tracking metrics for processing summary
-    metrics = {"total": 0, "written": 0, "rewritten": 0, "skipped_safety": 0, "skipped_done": 0}
+    metrics = {"total": 0, "written": 0, "rewritten": 0, "skipped_safety": 0, "skipped_done": 0, "skipped_noncomplex": 0}
 
     def write_record(f_out, record: Dict[str, Any]):
         """Writes record to disk and ensures data persistence."""
         f_out.write(json.dumps(record, ensure_ascii=False) + "\n")
         f_out.flush()
-        if FORCE_DRIVE_SYNC:
+        if cfg.rewriting.force_drive_sync:
             os.fsync(f_out.fileno())
         metrics["written"] += 1
         oid_local = record.get("original_index", None)
         if oid_local is not None:
             done_ids.add(int(oid_local))
 
-    # Streaming input processing using centralized config paths
-    with open(ELI5_RAW_JSONL, "r") as fin, open(ELI5_REWRITTEN_JSONL, "a") as fout:
+    with open(input_file, "r") as fin, open(output_file, "a") as fout:
         for line in tqdm(fin, desc="Rewriting complex questions"):
             metrics["total"] += 1
-            if LIMIT_ROWS and metrics["total"] > LIMIT_ROWS:
+            if cfg.rewriting.limit_rows and metrics["total"] > cfg.rewriting.limit_rows:
                 break
 
             row = json.loads(line)
@@ -201,25 +197,28 @@ def main():
 
             complexity = (row.get("complexity") or "").lower().strip()
             if complexity != "complex":
-                skipped_noncomplex += 1
+                metrics["skipped_noncomplex"] += 1
                 write_record(fout, row)
                 continue
 
             # Core rewriting logic for complex queries
             new_answer = rewrite_complex_natural(
-                row.get("input", ""), row.get("output", ""), 
-                row.get("domain", ""), row.get("subject_area", "")
+                row.get("input", ""), 
+                row.get("output", ""), 
+                row.get("domain", ""), 
+                row.get("subject_area", ""),
+                cfg
             )
 
             if new_answer:
                 metrics["rewritten"] += 1
                 out_row = dict(row)
-                out_row.update({"output": new_answer, "rewritten": True, "rewriter_model": TEACHER_MODEL})
+                out_row.update({"output": new_answer, "rewritten": True, "rewriter_model": cfg.models.teacher})
                 write_record(fout, out_row)
             else:
                 write_record(fout, row)
 
-            time.sleep(SLEEP_SEC)
+            time.sleep(cfg.rewriting.sleep_sec)
 
     logging.info(f"Process complete. Rewritten: {metrics['rewritten']}")
 

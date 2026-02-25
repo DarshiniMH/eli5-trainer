@@ -1,23 +1,19 @@
-import argparse
 import json
 import os
 import time
 import pandas as pd
 import openai
 from dotenv import load_dotenv
+import hydra
+from omegaconf import DictConfig
 
-# Import centralized configurations and shared utilities
-from src.config import (
-    TOPIC_COMPLEX_CSV, 
-    TOPIC_SIMPLE_MINI_CSV, 
-    TOPIC_SIMPLE_4O_CSV
-)
+# Import centralized shared utilities only (configs are now handled by Hydra)
 from src.utils import setup_logging, ensure_dir, logging
 
 # -----------------------------
 # 1) CONFIGURATION AND API SETUP
 # -----------------------------
-setup_logging() # Utilizes centralized logging format
+setup_logging()
 load_dotenv()
 
 client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -75,7 +71,7 @@ TAXONOMY_SIMPLE = TAXONOMY_COMPLEX + [("Specialized & Meta", "Safety/Refusal", 1
 # -----------------------------
 # 4) CORE EXECUTION LOGIC
 # -----------------------------
-def call_llm(model, system_prompt, user_prompt, key_name):
+def call_llm(model, system_prompt, user_prompt, key_name, temperature):
     """Executes API call with retry logic and JSON validation."""
     for attempt in range(3):
         try:
@@ -86,7 +82,7 @@ def call_llm(model, system_prompt, user_prompt, key_name):
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                temperature=0.7
+                temperature=temperature
             )
             data = json.loads(response.choices[0].message.content.strip())
             if key_name in data and isinstance(data[key_name], list):
@@ -96,34 +92,35 @@ def call_llm(model, system_prompt, user_prompt, key_name):
             time.sleep(10)
     return []
 
-def main():
-    parser = argparse.ArgumentParser(description="Consolidated Topic Generator")
-    parser.add_argument("--mode", choices=["complex", "simple"], required=True)
-    parser.add_argument("--model", choices=["gpt-4o", "gpt-4o-mini"], required=True)
-    args = parser.parse_args()
+@hydra.main(version_base=None, config_path="../conf", config_name="config")
+def main(cfg: DictConfig):
+    # Retrieve execution arguments directly from the Hydra config
+    exec_mode = cfg.generation.mode
+    exec_model = cfg.generation.model
+    temp = cfg.generation.temperature
 
-    # Determine output path and configuration based on mode and model using config.py
-    if args.mode == "complex":
+    # Determine output path and configuration based on mode and model using Hydra config
+    if exec_mode == "complex":
         taxonomy = TAXONOMY_COMPLEX
         key_name = "concepts"
-        output_path = TOPIC_COMPLEX_CSV
+        output_path = cfg.files.topic_complex_csv
         sys_prompt_base = COMPLEX_PROMPT
     else:
         taxonomy = TAXONOMY_SIMPLE
         key_name = "questions"
         sys_prompt_base = SIMPLE_GENERAL_PROMPT
         # Naming convention follows model choice for simple questions
-        output_path = TOPIC_SIMPLE_4O_CSV if args.model == "gpt-4o" else TOPIC_SIMPLE_MINI_CSV
+        output_path = cfg.files.topic_simple_4o_csv if exec_model == "gpt-4o" else cfg.files.topic_simple_mini_csv
 
     all_topics = []
-    logging.info(f"Starting {args.mode} generation using {args.model}...")
+    logging.info(f"Starting {exec_mode} generation using {exec_model}...")
 
     for domain, subject, target in taxonomy:
         count = 0
         logging.info(f"Processing {subject} (Target: {target})")
 
         # Select prompt based on subject classification
-        if args.mode == "simple" and subject == "Safety/Refusal":
+        if exec_mode == "simple" and subject == "Safety/Refusal":
             current_sys_prompt = SIMPLE_SAFETY_PROMPT
         else:
             current_sys_prompt = sys_prompt_base
@@ -132,7 +129,8 @@ def main():
             needed = min(target - count, 100)
             user_msg = f"Generate {needed} distinct {key_name} for the subject area: {subject}."
             
-            results = call_llm(args.model, current_sys_prompt, user_msg, key_name)
+            # Pass the temperature from the Hydra config
+            results = call_llm(exec_model, current_sys_prompt, user_msg, key_name, temp)
             if not results:
                 logging.warning(f"Failed batch for {subject}. Advancing to next subject.")
                 break

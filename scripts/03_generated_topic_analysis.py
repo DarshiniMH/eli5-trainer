@@ -1,6 +1,8 @@
 import pandas as pd
-# Import centralized configurations and shared utilities
-from src.config import TOPIC_SIMPLE_MINI_CSV, TOPIC_SIMPLE_4O_CSV
+import hydra
+from omegaconf import DictConfig
+
+# Import centralized shared utilities only (configs are now handled by Hydra)
 from src.utils import setup_logging, logging
 
 # -----------------------------
@@ -8,12 +10,13 @@ from src.utils import setup_logging, logging
 # -----------------------------
 setup_logging() # Standardized logging format
 
-def main():
+@hydra.main(version_base=None, config_path="../conf", config_name="config")
+def main(cfg: DictConfig):
     """Performs comparative analysis between GPT-4o and GPT-4o-mini topic sets."""
     try:
-        # Utilizing centralized paths from config.py
-        df_mini = pd.read_csv(TOPIC_SIMPLE_MINI_CSV)
-        df_4o = pd.read_csv(TOPIC_SIMPLE_4O_CSV)
+        # Utilizing paths directly from the Hydra config object
+        df_mini = pd.read_csv(cfg.files.topic_simple_mini_csv)
+        df_4o = pd.read_csv(cfg.files.topic_simple_4o_csv)
         logging.info("Successfully loaded topic datasets for analysis.")
 
     except FileNotFoundError as e:
@@ -47,9 +50,10 @@ def main():
         print(f"\n---- comparing samples: {subject}-----\n")
 
         try:
-            # Deterministic sampling with random_state=42
-            samples_4o = df_4o[df_4o["subject_area"] == subject].sample(n=num_samples, random_state=42)
-            samples_mini = df_mini[df_mini["subject_area"] == subject].sample(n=num_samples, random_state=42)
+            # Deterministic sampling using the random_seed from Hydra config
+            seed = cfg.generation.random_seed
+            samples_4o = df_4o[df_4o["subject_area"] == subject].sample(n=num_samples, random_state=seed)
+            samples_mini = df_mini[df_mini["subject_area"] == subject].sample(n=num_samples, random_state=seed)
         except ValueError as e:
             print(f"Not enough samples for subject {subject}. Skipping sample comparison.")
             samples_4o = df_4o[df_4o["subject_area"] == subject]

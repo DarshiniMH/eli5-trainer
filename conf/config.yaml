@@ -1,0 +1,123 @@
+# conf/config.yaml
+
+dirs:
+  raw: "data/01_raw"
+  gen: "data/02_generated"
+  cur: "data/03_curated"
+  pro: "data/04_processed"
+  res: "data/05_tuned_results"
+  judge: "data/06_LLM_as_judge_results"
+
+files:
+  # Using Hydra interpolation to dynamically build the paths
+  topic_complex_csv: "${dirs.raw}/master_topic_list_complex_mini.csv"
+  topic_simple_mini_csv: "${dirs.raw}/master_topic_list_tagged_4o_mini.csv"
+  topic_simple_4o_csv: "${dirs.raw}/master_topic_list_tagged_4o.csv"
+  merged_topics_csv: "${dirs.raw}/merged_master_topic_list.csv"
+  
+  eli5_raw_jsonl: "${dirs.gen}/eli5_dataset_raw.jsonl"
+  eli5_rewritten_jsonl: "${dirs.gen}/eli5_dataset_rewritten_complex.jsonl"
+  
+  curation_sample_csv: "${dirs.cur}/review_sample.csv"
+  
+  multi_agent_judge_prompts: "src/v3_multi_agent_prompts.yaml"
+
+  pro_dir: "path/to/pro_dir" 
+
+  # Updated to use directory interpolation
+  baseline_file: "${dirs.res}/answer_gen_validation_base_ckpt425_final.jsonl"
+  output_file: "${dirs.judge}/eval_runA_runB_runC_multicall.jsonl"
+
+  judge_input_file: "${dirs.res}/gen_validation_base_ckpt425_runA_runB_runC.jsonl"
+  judge_output_file: "${dirs.judge}/multicall_eval_base_ckpt425_runA.jsonl"
+
+models:
+  teacher: "gpt-4o"
+  base: "mistralai/Mistral-7B-Instruct-v0.2"
+
+generation:
+  temperature: 0.7
+  mode: "simple"         # default mode
+  model: "gpt-4o-mini"
+  random_seed: 42
+
+teacher_generation:
+  temperature: 0.6
+  max_tokens: 1024
+  retries: 3
+  sleep_sec: 0.05
+
+rewriting:
+  limit_rows: null       # Set to an integer to test a small batch
+  sleep_sec: 0.05
+  max_retries: 3
+  min_complex_words: 160
+  force_drive_sync: true
+  
+  # Parameters for the initial draft
+  draft_temp: 0.3
+  draft_max_tokens: 1200
+  
+  # Parameters for the expansion pass
+  expand_temp: 0.2
+  expand_max_tokens: 1400
+
+curation:
+  sample_rate: 0.1
+  safety_category: "Safety/Refusal"
+
+prep:
+  mode: "prototype" 
+  prototype_size: 5000
+  test_size: 0.1
+
+inference:
+  model_repo: "TheBloke/Mistral-7B-Instruct-v0.2-GGUF"
+  model_file: "mistral-7b-instruct-v0.2.Q4_K_M.gguf"
+  validation_file: "prototype/validation.jsonl"
+  output_file: "results_prototype/baseline_validation_results.jsonl"
+  model_type: "mistral"
+  gpu_layers: 0
+  context_length: 2048
+  max_new_tokens: 512
+  temperature: 0.7
+  top_p: 0.95
+
+# Renamed to prevent conflicts with the earlier generation block
+tuned_generation:
+  base_model: "mistralai/Mistral-7B-Instruct-v0.2"
+  max_new_tokens: 256
+  do_sample: false
+  fsync_every_n: 25
+  run_adapters:
+    runA: "models/adapters_sweeps/runA_lr1e4_const_r64/best"
+    runB: "models/adapters_sweeps/runB_lr1e4_cosine_r64/best"
+    runC: "models/adapters_sweeps/runC_lr1e4_cosine_r32/best"
+
+judge:
+  judge_model: "gpt-4o"
+  test_mode: false
+  test_limit: 5
+  
+  # API call parameters
+  request_timeout_sec: 60
+  max_retries: 3
+  sleep_between_examples_sec: 0.1
+  
+  # Disk sync parameters
+  flush_every_line: true
+  fsync_every_n_lines: 25
+  
+  # Bias mitigation
+  randomize_model_order: true
+  deterministic_shuffle: true
+  
+  # Logging
+  log_each_call: true
+  log_call_times: true
+  
+  # The models to compare, mapped as [Short Label]: [JSON Key in Output]
+  compare_set:
+    base: "base_model"
+    ckpt425: "tuned_ckpt_425"
+    runA: "tuned_runA"
