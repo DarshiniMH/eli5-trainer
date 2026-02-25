@@ -29,7 +29,7 @@ An end‑to‑end, **data‑centric** pipeline to fine‑tune **Mistral‑7B‑I
 I started by extracting topics from **cais/mmlu**, but those questions were **exam‑style** and too specific for “what kids actually ask.”  
 So I pivoted to a custom taxonomy and generated my own dataset.
 
-Script: `01_topic_extraction.py`
+Script: `scripts/01_topic_extraction_and_Exploration.py`
 
 ### 1) Build dataset from taxonomy
 Generated:
@@ -40,14 +40,14 @@ Generated:
 Merged + deduped topics (generated via GPT‑4o and GPT‑4o‑mini).
 
 Scripts:
-- `02_topic_generation.py`
-- `03_generated_topic_analysis.py`
-- `04_merge_topics.py`
+- `scripts/02_topic_generation.py`
+- `scripts/03_generated_topic_analysis.py`
+- `scripts/04_merge_topics.py`
 
 ### 2) Generate teacher‑style answers (Dataset v1)
 Generated targets with a teacher persona prompt.
 
-Script: `05_generate_answers.py`
+Script: `scripts/05_generate_answers.py`
 
 ### 3) Prototype training (sanity check, ~1000 samples)
 Before committing to full training time, I ran a prototype (~900 train / 100 val). Loss dropped and outputs visibly changed → proceed to full training.
@@ -77,7 +77,7 @@ To fix weak complex examples, I regenerated/re‑wrote the **complex subset** wi
 - at least one example/analogy
 - safety/refusal rows preserved
 
-Script: `06_regenerate_answer_for_complex_questions.py`
+Script: `scripts/06_regenerate_answer_for_complex_questions.py`
 
 ### 6) Dataset v2 sweeps + final evaluation (Judge v3 multicall)
 Final evaluation uses **4 separate judge calls** per example:
@@ -184,6 +184,8 @@ same config, different datasets
 
 ## How to run the pipeline
 
+ This project uses Hydra for configuration management. All paths, model settings, and execution parameters are defined in conf/config.yaml.
+
 ### Prerequisites
 - Python 3.10+
 - GPU recommended for QLoRA training
@@ -195,15 +197,20 @@ pip install -r requirements.txt
 
 ### Pipeline Execution
 '''bash
-# Data generation
-python 05_generate_answers.py
-python 06_regenerate_answer_for_complex_questions.py   # crucial for quality
+cd scripts
 
-# Training
+# 1. Data Generation
+python 02_topics_generator.py generation.mode=complex
+python 02_topics_generator.py generation.mode=simple
+python 04_merge_topics.py
+python 05_generate_answers.py
+python 06_regenerate_answers_for_complex_questions.py # Crucial for target quality
+
+# 2. Data Preparation & Training
+python 08_prepare_data_for_training.py
 python 09_model_training.py
 
-# Generate answers (for evaluation)
-python 10_generate_tuned_model_outputs.py
-
-# Evaluation (LLM-as-Judge)
+# 3. Evaluation
+python 10_generate_baseline_Mistral_outputs.py
+python 11_generate_tuned_model_outputs.py
 python 12_llm_judge_eval.py
